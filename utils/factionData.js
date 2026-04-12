@@ -1,13 +1,9 @@
-const path = require('path');
 const { levels: priestLevels } = require('./achievements');
 const { getFactionLevels } = require('./factionAchievements');
-
-const dataDir = path.join(__dirname, '../data');
 
 const factionData = {
   priests: {
     name: 'الكهنة',
-    usersPath: path.join(dataDir, 'users.json'),
     field: 'blessings',
     unit: 'بركة',
     levels: priestLevels,
@@ -15,7 +11,6 @@ const factionData = {
   },
   warriors: {
     name: 'المحاربين',
-    usersPath: path.join(dataDir, 'warriors_users.json'),
     field: 'points',
     unit: 'ضربة',
     levels: getFactionLevels('warriors'),
@@ -23,7 +18,6 @@ const factionData = {
   },
   mages: {
     name: 'السحرة',
-    usersPath: path.join(dataDir, 'mages_users.json'),
     field: 'points',
     unit: 'تعويذة',
     levels: getFactionLevels('mages'),
@@ -33,22 +27,6 @@ const factionData = {
 
 function getFactionData(factionKey) {
   return factionData[factionKey];
-}
-
-function ensureFactionUser(users, userId, field) {
-  if (!users[userId]) {
-    users[userId] = { [field]: 0, achievements: [] };
-  }
-
-  if (typeof users[userId][field] !== 'number') {
-    users[userId][field] = 0;
-  }
-
-  if (!Array.isArray(users[userId].achievements)) {
-    users[userId].achievements = [];
-  }
-
-  return users[userId];
 }
 
 function syncLevelAchievements(user, factionConfig) {
@@ -66,6 +44,5 @@ function syncLevelAchievements(user, factionConfig) {
 
 module.exports = {
   getFactionData,
-  ensureFactionUser,
   syncLevelAchievements,
 };

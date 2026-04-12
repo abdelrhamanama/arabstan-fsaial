@@ -1,6 +1,11 @@
 const fs = require('fs');
 const pathModule = require('path');
 
+// ---------------------------------------------------------------------------
+// Legacy JSON helpers — kept for any code that still reads non-user data
+// (e.g. admin_actions.json during a transition period).
+// ---------------------------------------------------------------------------
+
 function readData(path) {
   if (!fs.existsSync(path)) return {};
   return JSON.parse(fs.readFileSync(path));

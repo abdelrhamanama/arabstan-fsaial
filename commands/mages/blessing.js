@@ -1,14 +1,12 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const path = require('path');
 const config = require('../../config/config');
 const { getFactionLevelInfo, checkFactionAchievements } = require('../../utils/factionAchievements');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
-const { readData, writeData } = require('../../utils/dataManager');
+const { getUser, updateUser, getCooldown, setCooldown } = require('../../utils/database');
 const { isConfiguredId, memberHasAnyRole, normalizeId } = require('../../utils/factionAccess');
 
 const faction = config.factions.mages;
-const usersPath = path.join(__dirname, '../../data/mages_users.json');
-const cooldownsPath = path.join(__dirname, '../../data/mages_cooldowns.json');
+const FACTION_KEY = 'mages';
 
 const spellResults = [
   { type: 'success', text: '🔮 تعويذة ناجحة! السحر استجاب لك.' },
@@ -36,13 +34,12 @@ module.exports = {
       return interaction.reply({ content: '❌ ليس لديك صلاحية استخدام أوامر السحرة!', ephemeral: true });
     }
 
-    const users = readData(usersPath);
-    const cooldowns = readData(cooldownsPath);
     const userId = interaction.user.id;
     const now = Date.now();
 
-    if (cooldowns[userId] && now < cooldowns[userId]) {
-      const timeLeft = Math.ceil((cooldowns[userId] - now) / 1000);
+    const cooldownUntil = await getCooldown(userId, FACTION_KEY);
+    if (cooldownUntil && now < cooldownUntil) {
+      const timeLeft = Math.ceil((cooldownUntil - now) / 1000);
       const minutes = Math.floor(timeLeft / 60);
       const seconds = timeLeft % 60;
       return interaction.reply({
@@ -51,23 +48,23 @@ module.exports = {
       });
     }
 
-    if (!users[userId]) {
-      users[userId] = { points: 0, achievements: [] };
-    }
+    const existing = await getUser(userId, FACTION_KEY);
+    const userData = existing
+      ? { points: existing.blessings, achievements: existing.achievements }
+      : { points: 0, achievements: [] };
 
     const result = randomChoice(spellResults);
     let newAchievement = null;
 
     if (result.type === 'success') {
-      users[userId].points += 1;
-      newAchievement = checkFactionAchievements(users[userId], 'mages');
+      userData.points += 1;
+      newAchievement = checkFactionAchievements(userData, FACTION_KEY);
     }
 
-    writeData(usersPath, users);
-    cooldowns[userId] = now + config.cooldownTime * 1000;
-    writeData(cooldownsPath, cooldowns);
+    await updateUser(userId, FACTION_KEY, userData.points, userData.achievements);
+    await setCooldown(userId, FACTION_KEY, now + config.cooldownTime * 1000);
 
-    const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(users[userId].points, 'mages');
+    const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(userData.points, FACTION_KEY);
     const levelColor = [0x95a5a6, 0x2ecc71, 0x3498db, 0xe67e22, 0x9b59b6, 0xf1c40f];
     const color = levelColor[currentLevel] || 0x9b59b6;
 
@@ -83,7 +80,7 @@ module.exports = {
         },
         {
           name: '🔮 إجمالي التعاويذ',
-          value: `**${users[userId].points}** تعويذة`,
+          value: `**${userData.points}** تعويذة`,
           inline: true,
         }
       );

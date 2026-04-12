@@ -1,22 +1,24 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { readData } = require('../../utils/dataManager');
+const { getUser } = require('../../utils/database');
 const { getFactionLevelInfo } = require('../../utils/factionAchievements');
-const path = require('path');
+
+const FACTION_KEY = 'warriors';
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('انجازات_المحارب')
     .setDescription('اعرض إنجازاتك كمحارب ومستواك 🏆'),
 
-  execute(interaction) {
-    const users = readData(path.join(__dirname, '../../data/warriors_users.json'));
+  async execute(interaction) {
     const userId = interaction.user.id;
+    const existing = await getUser(userId, FACTION_KEY);
 
-    if (!users[userId] || users[userId].points === 0) {
+    if (!existing || existing.blessings === 0) {
       return interaction.reply({ content: '❌ لا تملك أي بيانات محارب بعد. استخدم `/ضربة` أولاً!', ephemeral: true });
     }
 
-    const userData = users[userId];
+    // blessings column stores the numeric score for all factions
+    const userData = { points: existing.blessings, achievements: existing.achievements };
     const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(userData.points, 'warriors');
     const achievements = userData.achievements && userData.achievements.length > 0
       ? userData.achievements.join('\n')
