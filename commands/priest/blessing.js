@@ -1,15 +1,13 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const path = require('path');
 const config = require('../../config/config');
 const { getBlessingResult } = require('../../utils/random');
 const { checkAchievements, getLevelInfo } = require('../../utils/achievements');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
-const { readData, writeData } = require('../../utils/dataManager');
+const { getUser, updateUser, getCooldown, setCooldown } = require('../../utils/database');
 const { isConfiguredId, memberHasAnyRole, normalizeId } = require('../../utils/factionAccess');
 
 const faction = config.factions.priests;
-const usersPath = path.join(__dirname, '../../data/users.json');
-const cooldownsPath = path.join(__dirname, '../../data/cooldowns.json');
+const FACTION_KEY = 'priests';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -25,13 +23,12 @@ module.exports = {
       return interaction.reply({ content: '❌ ليس لديك صلاحية استخدام البركة!', ephemeral: true });
     }
 
-    const users = readData(usersPath);
-    const cooldowns = readData(cooldownsPath);
     const userId = interaction.user.id;
     const now = Date.now();
 
-    if (cooldowns[userId] && now < cooldowns[userId]) {
-      const timeLeft = Math.ceil((cooldowns[userId] - now) / 1000);
+    const cooldownUntil = await getCooldown(userId, FACTION_KEY);
+    if (cooldownUntil && now < cooldownUntil) {
+      const timeLeft = Math.ceil((cooldownUntil - now) / 1000);
       const minutes = Math.floor(timeLeft / 60);
       const seconds = timeLeft % 60;
       return interaction.reply({
@@ -40,23 +37,23 @@ module.exports = {
       });
     }
 
-    if (!users[userId]) {
-      users[userId] = { blessings: 0, achievements: [] };
-    }
+    const existing = await getUser(userId, FACTION_KEY);
+    const userData = existing
+      ? { blessings: existing.blessings, achievements: existing.achievements }
+      : { blessings: 0, achievements: [] };
 
     const result = getBlessingResult();
     let newAchievement = null;
 
     if (result.type === 'success') {
-      users[userId].blessings += 1;
-      newAchievement = checkAchievements(users[userId]);
+      userData.blessings += 1;
+      newAchievement = checkAchievements(userData);
     }
 
-    writeData(usersPath, users);
-    cooldowns[userId] = now + config.cooldownTime * 1000;
-    writeData(cooldownsPath, cooldowns);
+    await updateUser(userId, FACTION_KEY, userData.blessings, userData.achievements);
+    await setCooldown(userId, FACTION_KEY, now + config.cooldownTime * 1000);
 
-    const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getLevelInfo(users[userId].blessings);
+    const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getLevelInfo(userData.blessings);
 
     const levelColor = [0x95a5a6, 0x2ecc71, 0x3498db, 0xe67e22, 0x9b59b6, 0xf1c40f];
     const color = levelColor[currentLevel] || 0x9b59b6;
@@ -73,7 +70,7 @@ module.exports = {
         },
         {
           name: '🙏 إجمالي البركات',
-          value: `**${users[userId].blessings}** بركة`,
+          value: `**${userData.blessings}** بركة`,
           inline: true,
         }
       );

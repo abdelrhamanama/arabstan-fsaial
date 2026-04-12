@@ -1,12 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const path = require('path');
 const config = require('../../config/config');
-const { readData, writeData } = require('../../utils/dataManager');
 const { getConfiguredIds, memberHasAnyRole } = require('../../utils/factionAccess');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
-const { getFactionData, ensureFactionUser, syncLevelAchievements } = require('../../utils/factionData');
-
-const auditPath = path.join(__dirname, '../../data/admin_actions.json');
+const { getFactionData, syncLevelAchievements } = require('../../utils/factionData');
+const { getUser, updateUser, appendAuditLog } = require('../../utils/database');
 
 function hasAdminAccess(member) {
   if (getConfiguredIds(config.adminRoles).length === 0) return false;
@@ -15,20 +12,6 @@ function hasAdminAccess(member) {
 
 function isAdminAccessConfigured() {
   return getConfiguredIds(config.adminRoles).length > 0;
-}
-
-function appendAuditLog(entry) {
-  const audit = readData(auditPath);
-  if (!Array.isArray(audit.actions)) {
-    audit.actions = [];
-  }
-
-  audit.actions.push({
-    ...entry,
-    at: new Date().toISOString(),
-  });
-
-  writeData(auditPath, audit);
 }
 
 async function refreshLeaderboard(interaction, factionKey) {
@@ -126,8 +109,13 @@ module.exports = {
       return interaction.reply({ content: '❌ لازم تكتب اسم الإنجاز اليدوي.', ephemeral: true });
     }
 
-    const users = readData(factionData.usersPath);
-    const userData = ensureFactionUser(users, targetUser.id, factionData.field);
+    // Load user from database (blessings column stores the score for all factions)
+    const existing = await getUser(targetUser.id, factionKey);
+    const userData = {
+      [factionData.field]: existing ? existing.blessings : 0,
+      achievements: existing ? [...existing.achievements] : [],
+    };
+
     const beforePoints = userData[factionData.field];
     const beforeAchievements = [...userData.achievements];
     let resultText = '';
@@ -154,9 +142,9 @@ module.exports = {
       }
     }
 
-    writeData(factionData.usersPath, users);
+    await updateUser(targetUser.id, factionKey, userData[factionData.field], userData.achievements);
 
-    appendAuditLog({
+    await appendAuditLog({
       adminId: interaction.user.id,
       targetUserId: targetUser.id,
       faction: factionKey,

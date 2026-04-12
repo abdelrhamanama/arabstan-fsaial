@@ -2,6 +2,7 @@ require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord.js');
+const { initDatabase, closeDatabase } = require('./utils/database');
 
 const token = process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
 
@@ -66,7 +67,22 @@ client.once('clientReady', async () => {
   }
 });
 
-client.login(token).catch((err) => {
-  console.error('Failed to log in to Discord:', err.message);
-  process.exit(1);
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await closeDatabase();
+  process.exit(0);
 });
+process.on('SIGTERM', async () => {
+  await closeDatabase();
+  process.exit(0);
+});
+
+// Initialize database first, then connect to Discord
+initDatabase()
+  .then(() => {
+    return client.login(token);
+  })
+  .catch((err) => {
+    console.error('❌ Startup failed:', err.message);
+    process.exit(1);
+  });

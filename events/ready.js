@@ -1,6 +1,5 @@
 const config = require('../config/config');
 const { updateFactionLeaderboard } = require('../utils/leaderboard');
-const { startAutoBackup } = require('../utils/backup');
 const { isConfiguredId, normalizeId } = require('../utils/factionAccess');
 
 module.exports = {
@@ -9,8 +8,6 @@ module.exports = {
   async execute(client) {
     console.log(`🔥 Logged in as ${client.user.tag}`);
     console.log(`📊 Serving ${client.guilds.cache.size} server(s)`);
-
-    startAutoBackup(60);
 
     for (const [factionKey, faction] of Object.entries(config.factions)) {
       if (!isConfiguredId(faction.leaderboardChannel)) continue;
