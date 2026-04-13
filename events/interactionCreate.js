@@ -1,3 +1,5 @@
+const { logCommand } = require('../utils/commandLogger');
+
 module.exports = {
   name: 'interactionCreate',
   once: false,
@@ -9,6 +11,10 @@ module.exports = {
 
     try {
       await command.execute(interaction);
+      // Log the command after successful execution
+      logCommand(interaction).catch(err =>
+        console.error('❌ Command logger error:', err.message)
+      );
     } catch (error) {
       console.error(`Error executing /${interaction.commandName}:`, error);
       const msg = { content: '❌ حدث خطأ أثناء تنفيذ الأمر!', ephemeral: true };
