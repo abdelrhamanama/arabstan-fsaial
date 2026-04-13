@@ -20,7 +20,7 @@ module.exports = {
       roles: [
         "1492475478987243612"
       ],
-      channel: "PUT_WARRIOR_CHANNEL_ID_HERE",
+      channel: "1492964766535254136",
       leaderboardChannel: "PUT_WARRIOR_LEADERBOARD_CHANNEL_ID_HERE"
     },
     mages: {
