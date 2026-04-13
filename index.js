@@ -5,15 +5,23 @@ const { Client, GatewayIntentBits, Collection, REST, Routes } = require('discord
 const { initDatabase } = require('./db/connection');
 
 const token = process.env.TOKEN || process.env.DISCORD_TOKEN || process.env.BOT_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID; // لازم تحطه في Railway
+const GUILD_ID = process.env.GUILD_ID;   // لازم تحطه برضه
 
 if (!token) {
   console.error('❌ Missing Discord bot token. Add TOKEN in Railway Variables');
   process.exit(1);
 }
 
+if (!CLIENT_ID || !GUILD_ID) {
+  console.error('❌ Missing CLIENT_ID or GUILD_ID in environment variables');
+  process.exit(1);
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers, // ✅ مهم للرولات
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
   ],
@@ -64,14 +72,23 @@ client.once('ready', async () => {
   try {
     const rest = new REST({ version: '10' }).setToken(token);
 
+    // 🧹 مسح الأوامر القديمة (مرة واحدة بس)
     await rest.put(
-      Routes.applicationCommands(client.user.id),
+      Routes.applicationCommands(CLIENT_ID),
+      { body: [] }
+    );
+
+    console.log('🧹 Old global commands cleared');
+
+    // 🚀 تسجيل الأوامر للسيرفر مباشرة
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
       { body: commandsData }
     );
 
-    console.log(`✅ Slash commands registered (${commandsData.length})`);
+    console.log(`✅ Guild slash commands registered (${commandsData.length})`);
   } catch (err) {
-    console.error('❌ Failed to register slash commands:', err.message);
+    console.error('❌ Failed to register slash commands:', err);
   }
 });
 
