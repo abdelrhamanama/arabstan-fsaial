@@ -21,7 +21,7 @@ module.exports = {
         "1492475478987243612"
       ],
       channel: "1492964766535254136",
-      leaderboardChannel: "PUT_WARRIOR_LEADERBOARD_CHANNEL_ID_HERE"
+      leaderboardChannel: "1492964766535254136"
     },
     mages: {
       name: "السحرة",
