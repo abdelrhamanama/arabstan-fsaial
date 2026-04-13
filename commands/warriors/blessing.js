@@ -4,7 +4,7 @@ const config = require('../../config/config');
 const { getFactionLevelInfo, checkFactionAchievements } = require('../../utils/factionAchievements');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
 const { readData, writeData } = require('../../utils/dataManager');
-const { isConfiguredId, memberHasAnyRole, normalizeId } = require('../../utils/factionAccess');
+const { isConfiguredId, normalizeId } = require('../../utils/factionAccess');
 
 const faction = config.factions.warriors;
 const usersPath = path.join(__dirname, '../../data/warriors_users.json');
@@ -28,11 +28,21 @@ module.exports = {
     .setDescription('استخدم ضربة المحارب ⚔️'),
 
   async execute(interaction) {
+
+    // ✅ جلب العضو كامل بالرولات
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+
+    // ✅ التحقق من القناة
     if (isConfiguredId(faction.channel) && interaction.channelId !== normalizeId(faction.channel)) {
       return interaction.reply({ content: '❌ هذا الأمر يعمل في قناة المحاربين فقط!', ephemeral: true });
     }
 
-    if (!memberHasAnyRole(interaction.member, faction.roles)) {
+    // ✅ التحقق من الرول (أي رول من الليست)
+    const hasRole = faction.roles.some(roleId =>
+      member.roles.cache.has(roleId)
+    );
+
+    if (!hasRole) {
       return interaction.reply({ content: '❌ ليس لديك صلاحية استخدام أوامر المحاربين!', ephemeral: true });
     }
 
@@ -68,11 +78,9 @@ module.exports = {
     writeData(cooldownsPath, cooldowns);
 
     const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(users[userId].points, 'warriors');
-    const levelColor = [0x95a5a6, 0x2ecc71, 0x3498db, 0xe67e22, 0x9b59b6, 0xf1c40f];
-    const color = levelColor[currentLevel] || 0xe67e22;
 
     const embed = new EmbedBuilder()
-      .setColor(color)
+      .setColor(0xe67e22)
       .setTitle(result.type === 'success' ? '✅ ضربة ناجحة!' : '❌ ضربة فاشلة')
       .setDescription(result.text)
       .addFields(
@@ -88,17 +96,6 @@ module.exports = {
         }
       );
 
-    if (!maxed && nextLevel) {
-      embed.addFields({
-        name: `🎯 المستوى القادم — ${nextLevel.title}`,
-        value: `\`${progressBar}\`\nمتبقي **${remaining}** ضربة للوصول للمستوى **${nextLevel.level}**`,
-      });
-    } else if (maxed) {
-      embed.addFields({ name: '🌟 أقصى مستوى!', value: 'وصلت للمستوى الأسطوري، أنت الأقوى!' });
-    }
-
-    embed.setFooter({ text: 'المستويات: 100 ⟶ 200 ⟶ 300 ⟶ 500 ⟶ 800' });
-
     await interaction.reply({ embeds: [embed], ephemeral: true });
 
     if (newAchievement) {
@@ -110,7 +107,7 @@ module.exports = {
         const leaderboardChannel = interaction.guild.channels.cache.get(normalizeId(faction.leaderboardChannel));
         if (leaderboardChannel) await updateFactionLeaderboard(leaderboardChannel, 'warriors');
       } catch (err) {
-        console.error('Warriors leaderboard update error:', err.message);
+        console.error(err);
       }
     }
   },
