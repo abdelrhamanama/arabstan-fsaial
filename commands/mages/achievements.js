@@ -1,22 +1,20 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { readData } = require('../../utils/dataManager');
+const { readFactionData } = require('../../utils/dbManager');
 const { getFactionLevelInfo } = require('../../utils/factionAchievements');
-const path = require('path');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('انجازات_الساحر')
     .setDescription('اعرض إنجازاتك كساحر ومستواك 🏆'),
 
-  execute(interaction) {
-    const users = readData(path.join(__dirname, '../../data/mages_users.json'));
+  async execute(interaction) {
     const userId = interaction.user.id;
+    const userData = await readFactionData(userId, 'mages');
 
-    if (!users[userId] || users[userId].points === 0) {
+    if (userData.points === 0) {
       return interaction.reply({ content: '❌ لا تملك أي بيانات ساحر بعد. استخدم `/تعويذة` أولاً!', ephemeral: true });
     }
 
-    const userData = users[userId];
     const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(userData.points, 'mages');
     const achievements = userData.achievements && userData.achievements.length > 0
       ? userData.achievements.join('\n')
