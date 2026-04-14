@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const config = require('../../config/config');
-const { getFactionLevelInfo } = require('../../utils/factionAchievements');
+const { getFactionLevelInfo, syncFactionAchievementsWithLevels } = require('../../utils/factionAchievements');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
 const { readFactionData, writeFactionData, getCooldown, setCooldown, addAchievement } = require('../../utils/dbManager');
 const { isConfiguredId, memberHasAnyRole, normalizeId } = require('../../utils/factionAccess');
@@ -36,7 +36,6 @@ module.exports = {
     const userId = interaction.user.id;
     const now = Date.now();
 
-    // Check cooldown
     const cooldownTime = await getCooldown(userId, 'mages');
     if (cooldownTime && now < cooldownTime) {
       const timeLeft = Math.ceil((cooldownTime - now) / 1000);
@@ -48,28 +47,23 @@ module.exports = {
       });
     }
 
-    // Get user data
     const userData = await readFactionData(userId, 'mages');
     const result = randomChoice(spellResults);
-    let newAchievement = null;
+    let newAchievements = [];
 
     if (result.type === 'success') {
       userData.points += 1;
       
-      // Check for new achievements
-      for (const level of require('../../utils/factionAchievements').getFactionLevels('mages')) {
-        if (userData.points >= level.required && !userData.achievements.includes(level.achievement)) {
-          await addAchievement(userId, 'mages', level.achievement);
-          newAchievement = level.achievement;
-          break;
-        }
+      const { achievements, unlocked } = syncFactionAchievementsWithLevels(userData.points, userData.achievements, 'mages');
+      userData.achievements = achievements;
+      newAchievements = unlocked;
+
+      for (const achievement of newAchievements) {
+        await addAchievement(userId, 'mages', achievement);
       }
     }
 
-    // Save user data
     await writeFactionData(userId, 'mages', userData);
-    
-    // Set cooldown
     await setCooldown(userId, 'mages', now + config.cooldownTime * 1000);
 
     const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(userData.points, 'mages');
@@ -106,8 +100,10 @@ module.exports = {
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
 
-    if (newAchievement) {
-      await interaction.channel.send(`🏆 <@${userId}> حصل على إنجاز جديد: **${newAchievement}**!`);
+    if (newAchievements.length > 0) {
+      for (const achievement of newAchievements) {
+        await interaction.channel.send(`🏆 <@${userId}> حصل على إنجاز جديد: **${achievement}**!`);
+      }
     }
 
     if (isConfiguredId(faction.leaderboardChannel)) {
