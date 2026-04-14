@@ -46,7 +46,8 @@ module.exports = {
       userData.blessings += 1;
       
       // Check for new achievements
-      for (const level of require('../../utils/achievements').levels) {
+      const levels = require('../../utils/achievements').levels;
+      for (const level of levels) {
         if (userData.blessings >= level.required && !userData.achievements.includes(level.achievement)) {
           await addAchievement(userId, 'priests', level.achievement);
           newAchievement = level.achievement;
@@ -110,4 +111,3 @@ module.exports = {
     }
   },
 };
-6️⃣
