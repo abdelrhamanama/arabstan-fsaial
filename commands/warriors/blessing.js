@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const config = require('../../config/config');
-const { getFactionLevelInfo, checkFactionAchievements } = require('../../utils/factionAchievements');
+const { getFactionLevelInfo, syncFactionAchievementsWithLevels } = require('../../utils/factionAchievements');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
 const { readFactionData, writeFactionData, getCooldown, setCooldown, addAchievement } = require('../../utils/dbManager');
 const { isConfiguredId, normalizeId } = require('../../utils/factionAccess');
@@ -25,15 +25,12 @@ module.exports = {
     .setDescription('استخدم ضربة المحارب ⚔️'),
 
   async execute(interaction) {
-    // ✅ جلب العضو كامل بالرولات
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
-    // ✅ التحقق من القناة
     if (isConfiguredId(faction.channel) && interaction.channelId !== normalizeId(faction.channel)) {
       return interaction.reply({ content: '❌ هذا الأمر يعمل في قناة المحاربين فقط!', ephemeral: true });
     }
 
-    // ✅ التحقق من الرول (أي رول من الليست)
     const hasRole = faction.roles.some(roleId =>
       member.roles.cache.has(roleId)
     );
@@ -45,7 +42,6 @@ module.exports = {
     const userId = interaction.user.id;
     const now = Date.now();
 
-    // Check cooldown
     const cooldownTime = await getCooldown(userId, 'warriors');
     if (cooldownTime && now < cooldownTime) {
       const timeLeft = Math.ceil((cooldownTime - now) / 1000);
@@ -57,28 +53,23 @@ module.exports = {
       });
     }
 
-    // Get user data
     const userData = await readFactionData(userId, 'warriors');
     const result = randomChoice(attackResults);
-    let newAchievement = null;
+    let newAchievements = [];
 
     if (result.type === 'success') {
       userData.points += 1;
       
-      // Check for new achievements
-      for (const level of require('../../utils/factionAchievements').getFactionLevels('warriors')) {
-        if (userData.points >= level.required && !userData.achievements.includes(level.achievement)) {
-          await addAchievement(userId, 'warriors', level.achievement);
-          newAchievement = level.achievement;
-          break;
-        }
+      const { achievements, unlocked } = syncFactionAchievementsWithLevels(userData.points, userData.achievements, 'warriors');
+      userData.achievements = achievements;
+      newAchievements = unlocked;
+
+      for (const achievement of newAchievements) {
+        await addAchievement(userId, 'warriors', achievement);
       }
     }
 
-    // Save user data
     await writeFactionData(userId, 'warriors', userData);
-    
-    // Set cooldown
     await setCooldown(userId, 'warriors', now + config.cooldownTime * 1000);
 
     const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(userData.points, 'warriors');
@@ -102,8 +93,10 @@ module.exports = {
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
 
-    if (newAchievement) {
-      await interaction.channel.send(`🏆 <@${userId}> حصل على إنجاز جديد: **${newAchievement}**!`);
+    if (newAchievements.length > 0) {
+      for (const achievement of newAchievements) {
+        await interaction.channel.send(`🏆 <@${userId}> حصل على إنجاز جديد: **${achievement}**!`);
+      }
     }
 
     if (isConfiguredId(faction.leaderboardChannel)) {
