@@ -1,4 +1,4 @@
-const { logCommand } = require('../utils/commandLogger');
+const { logCommand } = require('../utils/dbManager');
 
 module.exports = {
   name: 'interactionCreate',
@@ -12,7 +12,14 @@ module.exports = {
     try {
       await command.execute(interaction);
       // Log the command after successful execution
-      logCommand(interaction).catch(err =>
+      await logCommand(
+        interaction.user.id,
+        interaction.user.username,
+        interaction.commandName,
+        JSON.stringify(interaction.options.data),
+        interaction.guildId,
+        interaction.guild?.name
+      ).catch(err =>
         console.error('❌ Command logger error:', err.message)
       );
     } catch (error) {
