@@ -1,22 +1,20 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const { readData } = require('../../utils/dataManager');
+const { readFactionData } = require('../../utils/dbManager');
 const { getLevelInfo } = require('../../utils/achievements');
-const path = require('path');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('انجازات_الكاهن')
     .setDescription('اعرض إنجازاتك ككاهن ومستواك 🏆'),
 
-  execute(interaction) {
-    const users = readData(path.join(__dirname, '../../data/users.json'));
+  async execute(interaction) {
     const userId = interaction.user.id;
+    const userData = await readFactionData(userId, 'priests');
 
-    if (!users[userId] || users[userId].blessings === 0) {
+    if (userData.blessings === 0) {
       return interaction.reply({ content: '❌ لا تملك أي بيانات بعد. استخدم `/بركة` أولاً!', ephemeral: true });
     }
 
-    const userData = users[userId];
     const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getLevelInfo(userData.blessings);
     const achievements = userData.achievements && userData.achievements.length > 0
       ? userData.achievements.join('\n')
