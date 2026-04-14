@@ -31,8 +31,8 @@ module.exports = {
       roles: [
         "1492475213508509708"
       ],
-      channel: "PUT_MAGE_CHANNEL_ID_HERE",
-      leaderboardChannel: "PUT_MAGE_LEADERBOARD_CHANNEL_ID_HERE"
+      channel: "1493576493979144265",
+      leaderboardChannel: "1493576493979144265"
     }
   },
   priestRoles: [
