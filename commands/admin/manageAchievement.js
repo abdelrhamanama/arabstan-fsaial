@@ -1,9 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const config = require('../../config/config');
-const { readFactionData, writeFactionData, logAdminAction, getAchievements } = require('../../utils/dbManager');
+const { readFactionData, writeFactionData, logAdminAction, addAchievement } = require('../../utils/dbManager');
 const { getConfiguredIds, memberHasAnyRole } = require('../../utils/factionAccess');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
 const { getFactionData } = require('../../utils/factionData');
+const { syncAchievementsWithLevels } = require('../../utils/achievements');
+const { syncFactionAchievementsWithLevels } = require('../../utils/factionAchievements');
 
 function hasAdminAccess(member) {
   if (getConfiguredIds(config.adminRoles).length === 0) return false;
@@ -118,17 +120,48 @@ module.exports = {
 
     if (operation === 'add_points') {
       userData[pointField] += amount;
+      
+      if (factionKey === 'priests') {
+        const { achievements, unlocked } = syncAchievementsWithLevels(userData[pointField], userData.achievements);
+        userData.achievements = achievements;
+        unlockedAchievements = unlocked;
+      } else {
+        const { achievements, unlocked } = syncFactionAchievementsWithLevels(userData[pointField], userData.achievements, factionKey);
+        userData.achievements = achievements;
+        unlockedAchievements = unlocked;
+      }
+
+      for (const achievement of unlockedAchievements) {
+        await addAchievement(targetUser.id, factionKey, achievement);
+      }
+
       resultText = `تمت إضافة **${amount} ${factionData.unit}**.`;
     }
 
     if (operation === 'set_points') {
       userData[pointField] = amount;
+      
+      if (factionKey === 'priests') {
+        const { achievements, unlocked } = syncAchievementsWithLevels(userData[pointField], userData.achievements);
+        userData.achievements = achievements;
+        unlockedAchievements = unlocked;
+      } else {
+        const { achievements, unlocked } = syncFactionAchievementsWithLevels(userData[pointField], userData.achievements, factionKey);
+        userData.achievements = achievements;
+        unlockedAchievements = unlocked;
+      }
+
+      for (const achievement of unlockedAchievements) {
+        await addAchievement(targetUser.id, factionKey, achievement);
+      }
+
       resultText = `تم تحديد الرصيد إلى **${amount} ${factionData.unit}**.`;
     }
 
     if (operation === 'add_achievement') {
       if (!userData.achievements.includes(manualAchievement)) {
         userData.achievements.push(manualAchievement);
+        await addAchievement(targetUser.id, factionKey, manualAchievement);
         resultText = `تمت إضافة إنجاز يدوي: **${manualAchievement}**.`;
       } else {
         resultText = `اللاعب يمتلك الإنجاز بالفعل: **${manualAchievement}**.`;
@@ -164,11 +197,10 @@ module.exports = {
       )
       .setTimestamp();
 
-    if (userData.achievements.length > beforeAchievements.length) {
-      const newAchievements = userData.achievements.filter(a => !beforeAchievements.includes(a));
+    if (unlockedAchievements.length > 0) {
       embed.addFields({
         name: 'إنجازات اتفتحت تلقائيًا',
-        value: newAchievements.join('\n'),
+        value: unlockedAchievements.join('\n'),
       });
     }
 
