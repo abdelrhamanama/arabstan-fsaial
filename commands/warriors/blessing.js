@@ -1,14 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const path = require('path');
 const config = require('../../config/config');
 const { getFactionLevelInfo, checkFactionAchievements } = require('../../utils/factionAchievements');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
-const { readData, writeData } = require('../../utils/dataManager');
+const { readFactionData, writeFactionData, getCooldown, setCooldown, addAchievement } = require('../../utils/dbManager');
 const { isConfiguredId, normalizeId } = require('../../utils/factionAccess');
 
 const faction = config.factions.warriors;
-const usersPath = path.join(__dirname, '../../data/warriors_users.json');
-const cooldownsPath = path.join(__dirname, '../../data/warriors_cooldowns.json');
 
 const attackResults = [
   { type: 'success', text: '⚔️ ضربة ناجحة! المحارب أثبت قوته.' },
@@ -28,7 +25,6 @@ module.exports = {
     .setDescription('استخدم ضربة المحارب ⚔️'),
 
   async execute(interaction) {
-
     // ✅ جلب العضو كامل بالرولات
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
@@ -46,13 +42,13 @@ module.exports = {
       return interaction.reply({ content: '❌ ليس لديك صلاحية استخدام أوامر المحاربين!', ephemeral: true });
     }
 
-    const users = readData(usersPath);
-    const cooldowns = readData(cooldownsPath);
     const userId = interaction.user.id;
     const now = Date.now();
 
-    if (cooldowns[userId] && now < cooldowns[userId]) {
-      const timeLeft = Math.ceil((cooldowns[userId] - now) / 1000);
+    // Check cooldown
+    const cooldownTime = await getCooldown(userId, 'warriors');
+    if (cooldownTime && now < cooldownTime) {
+      const timeLeft = Math.ceil((cooldownTime - now) / 1000);
       const minutes = Math.floor(timeLeft / 60);
       const seconds = timeLeft % 60;
       return interaction.reply({
@@ -61,23 +57,31 @@ module.exports = {
       });
     }
 
-    if (!users[userId]) {
-      users[userId] = { points: 0, achievements: [] };
-    }
-
+    // Get user data
+    const userData = await readFactionData(userId, 'warriors');
     const result = randomChoice(attackResults);
     let newAchievement = null;
 
     if (result.type === 'success') {
-      users[userId].points += 1;
-      newAchievement = checkFactionAchievements(users[userId], 'warriors');
+      userData.points += 1;
+      
+      // Check for new achievements
+      for (const level of require('../../utils/factionAchievements').getFactionLevels('warriors')) {
+        if (userData.points >= level.required && !userData.achievements.includes(level.achievement)) {
+          await addAchievement(userId, 'warriors', level.achievement);
+          newAchievement = level.achievement;
+          break;
+        }
+      }
     }
 
-    writeData(usersPath, users);
-    cooldowns[userId] = now + config.cooldownTime * 1000;
-    writeData(cooldownsPath, cooldowns);
+    // Save user data
+    await writeFactionData(userId, 'warriors', userData);
+    
+    // Set cooldown
+    await setCooldown(userId, 'warriors', now + config.cooldownTime * 1000);
 
-    const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(users[userId].points, 'warriors');
+    const { currentLevel, currentTitle, nextLevel, remaining, progressBar, maxed } = getFactionLevelInfo(userData.points, 'warriors');
 
     const embed = new EmbedBuilder()
       .setColor(0xe67e22)
@@ -91,7 +95,7 @@ module.exports = {
         },
         {
           name: '⚔️ إجمالي الضربات',
-          value: `**${users[userId].points}** ضربة`,
+          value: `**${userData.points}** ضربة`,
           inline: true,
         }
       );
