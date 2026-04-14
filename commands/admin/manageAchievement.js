@@ -1,12 +1,9 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
-const path = require('path');
 const config = require('../../config/config');
-const { readData, writeData } = require('../../utils/dataManager');
+const { readFactionData, writeFactionData, logAdminAction, getAchievements } = require('../../utils/dbManager');
 const { getConfiguredIds, memberHasAnyRole } = require('../../utils/factionAccess');
 const { updateFactionLeaderboard } = require('../../utils/leaderboard');
-const { getFactionData, ensureFactionUser, syncLevelAchievements } = require('../../utils/factionData');
-
-const auditPath = path.join(__dirname, '../../data/admin_actions.json');
+const { getFactionData } = require('../../utils/factionData');
 
 function hasAdminAccess(member) {
   if (getConfiguredIds(config.adminRoles).length === 0) return false;
@@ -15,20 +12,6 @@ function hasAdminAccess(member) {
 
 function isAdminAccessConfigured() {
   return getConfiguredIds(config.adminRoles).length > 0;
-}
-
-function appendAuditLog(entry) {
-  const audit = readData(auditPath);
-  if (!Array.isArray(audit.actions)) {
-    audit.actions = [];
-  }
-
-  audit.actions.push({
-    ...entry,
-    at: new Date().toISOString(),
-  });
-
-  writeData(auditPath, audit);
 }
 
 async function refreshLeaderboard(interaction, factionKey) {
@@ -126,22 +109,20 @@ module.exports = {
       return interaction.reply({ content: '❌ لازم تكتب اسم الإنجاز اليدوي.', ephemeral: true });
     }
 
-    const users = readData(factionData.usersPath);
-    const userData = ensureFactionUser(users, targetUser.id, factionData.field);
-    const beforePoints = userData[factionData.field];
+    const userData = await readFactionData(targetUser.id, factionKey);
+    const pointField = factionKey === 'priests' ? 'blessings' : 'points';
+    const beforePoints = userData[pointField];
     const beforeAchievements = [...userData.achievements];
     let resultText = '';
     let unlockedAchievements = [];
 
     if (operation === 'add_points') {
-      userData[factionData.field] += amount;
-      unlockedAchievements = syncLevelAchievements(userData, factionData);
+      userData[pointField] += amount;
       resultText = `تمت إضافة **${amount} ${factionData.unit}**.`;
     }
 
     if (operation === 'set_points') {
-      userData[factionData.field] = amount;
-      unlockedAchievements = syncLevelAchievements(userData, factionData);
+      userData[pointField] = amount;
       resultText = `تم تحديد الرصيد إلى **${amount} ${factionData.unit}**.`;
     }
 
@@ -154,20 +135,20 @@ module.exports = {
       }
     }
 
-    writeData(factionData.usersPath, users);
+    await writeFactionData(targetUser.id, factionKey, userData);
 
-    appendAuditLog({
-      adminId: interaction.user.id,
-      targetUserId: targetUser.id,
-      faction: factionKey,
+    await logAdminAction(
+      interaction.user.id,
+      targetUser.id,
+      factionKey,
       operation,
       amount,
       manualAchievement,
       beforePoints,
-      afterPoints: userData[factionData.field],
+      userData[pointField],
       beforeAchievements,
-      afterAchievements: userData.achievements,
-    });
+      userData.achievements
+    );
 
     await refreshLeaderboard(interaction, factionKey);
 
@@ -179,14 +160,15 @@ module.exports = {
         { name: 'اللاعب', value: `<@${targetUser.id}>`, inline: true },
         { name: 'النتيجة', value: resultText },
         { name: 'الرصيد قبل', value: `${beforePoints} ${factionData.unit}`, inline: true },
-        { name: 'الرصيد بعد', value: `${userData[factionData.field]} ${factionData.unit}`, inline: true },
+        { name: 'الرصيد بعد', value: `${userData[pointField]} ${factionData.unit}`, inline: true },
       )
       .setTimestamp();
 
-    if (unlockedAchievements.length > 0) {
+    if (userData.achievements.length > beforeAchievements.length) {
+      const newAchievements = userData.achievements.filter(a => !beforeAchievements.includes(a));
       embed.addFields({
         name: 'إنجازات اتفتحت تلقائيًا',
-        value: unlockedAchievements.join('\n'),
+        value: newAchievements.join('\n'),
       });
     }
 
