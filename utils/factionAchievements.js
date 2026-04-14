@@ -73,9 +73,25 @@ function checkFactionAchievements(user, faction) {
   return newAchievement;
 }
 
+function syncFactionAchievementsWithLevels(points, achievements, faction) {
+  const levels = getFactionLevels(faction);
+  const newAchievements = [...achievements];
+  let unlockedAchievements = [];
+
+  for (const lvl of levels) {
+    if (points >= lvl.required && !newAchievements.includes(lvl.achievement)) {
+      newAchievements.push(lvl.achievement);
+      unlockedAchievements.push(lvl.achievement);
+    }
+  }
+
+  return { achievements: newAchievements, unlocked: unlockedAchievements };
+}
+
 module.exports = {
   factionLevels,
   getFactionLevels,
   getFactionLevelInfo,
   checkFactionAchievements,
+  syncFactionAchievementsWithLevels,
 };
