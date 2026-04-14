@@ -59,4 +59,18 @@ function checkAchievements(user) {
   return newAchievement;
 }
 
-module.exports = { levels, getLevelInfo, checkAchievements };
+function syncAchievementsWithLevels(blessings, achievements) {
+  const newAchievements = [...achievements];
+  let unlockedAchievements = [];
+
+  for (const lvl of levels) {
+    if (blessings >= lvl.required && !newAchievements.includes(lvl.achievement)) {
+      newAchievements.push(lvl.achievement);
+      unlockedAchievements.push(lvl.achievement);
+    }
+  }
+
+  return { achievements: newAchievements, unlocked: unlockedAchievements };
+}
+
+module.exports = { levels, getLevelInfo, checkAchievements, syncAchievementsWithLevels };
